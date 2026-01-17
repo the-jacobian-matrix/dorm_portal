@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex flex-column flex-md-row align-items-start justify-content-between gap-2 mb-3">
+  <div>
+    <div class="muted small"><a href="/students/{{ student.id }}">← Back</a></div>
+    <h1 class="h4 mb-1">Edit student</h1>
+    <div class="muted">Update name and email.</div>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    <form method="post" action="/students/{{ student.id }}/edit" class="vstack gap-2">
+      <div>
+        <label class="form-label">Name</label>
+        <input class="form-control" name="name" value="{{ student.name }}" required>
+      </div>
+      <div>
+        <label class="form-label">Email</label>
+        <input class="form-control" type="email" name="email" value="{{ student.email }}" required>
+      </div>
+
+      <div class="d-flex gap-2">
+        <button class="btn btn-primary">Save</button>
+        <a class="btn btn-outline-secondary" href="/students/{{ student.id }}">Cancel</a>
+      </div>
+    </form>
+
+    <hr>
+
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2">
+      <div>
+        <div class="fw-semibold text-danger">Danger zone</div>
+        <div class="muted small">Deletes the student and all their reports.</div>
+      </div>
+      <form method="post" action="/students/{{ student.id }}/delete" onsubmit="return confirm('Delete this student and all their reports?');">
+        <button class="btn btn-outline-danger">Delete student</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

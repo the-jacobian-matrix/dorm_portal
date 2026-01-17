@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+  <body style="font-family: Arial, sans-serif;">
+    <h2 style="margin: 0 0 8px 0;">Dorm Daily Report</h2>
+    <div style="color: #555; margin-bottom: 16px;">{{ student.name }} — {{ report.report_date }}</div>
+
+    {% if report.rating %}
+      <div style="margin-bottom: 12px;"><b>Rating:</b> {{ report.rating }}/5</div>
+    {% endif %}
+
+    <div style="white-space: pre-wrap; line-height: 1.4;">{{ report.notes }}</div>
+
+    {% if report.image_url %}
+      <div style="margin-top: 16px;"><b>Image:</b> <a href="{{ report.image_url }}">{{ report.image_url }}</a></div>
+    {% endif %}
+
+    {% if report.image_path and public_base_url %}
+      <div style="margin-top: 10px;"><b>Uploaded image:</b> <a href="{{ public_base_url }}{{ report.image_path }}">{{ public_base_url }}{{ report.image_path }}</a></div>
+    {% elif report.image_path %}
+      <div style="margin-top: 10px;"><b>Uploaded image:</b> {{ report.image_path }}</div>
+    {% endif %}
+
+    <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
+    <div style="color:#777; font-size: 12px;">Sent from Dorm Management Portal</div>
+  </body>
+</html>

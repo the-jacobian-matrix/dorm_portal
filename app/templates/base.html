@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ title or "Dorm Management" }}</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+      body { background: #f7f7fb; }
+      .card { border: 0; border-radius: 16px; }
+      .container-narrow { max-width: 980px; }
+      .muted { color: #6c757d; }
+      .badge-soft { background: rgba(13,110,253,.08); color: #0d6efd; }
+      a { text-decoration: none; }
+    </style>
+  </head>
+  <body>
+    <nav class="navbar navbar-expand-lg bg-white border-bottom">
+      <div class="container container-narrow">
+        <a class="navbar-brand fw-semibold" href="/students">Dorm Portal</a>
+
+        <div class="ms-auto d-flex align-items-center gap-2">
+          {% if current_user %}
+            <span class="muted small d-none d-md-inline">{{ current_user.name or current_user.email }}</span>
+            <a class="btn btn-sm btn-outline-secondary" href="/logout">Sign out</a>
+          {% else %}
+            <a class="btn btn-sm btn-primary" href="/login">Sign in</a>
+          {% endif %}
+        </div>
+      </div>
+    </nav>
+
+    <main class="container container-narrow py-4">
+      {% if flash_error %}
+        <div class="alert alert-danger">{{ flash_error }}</div>
+      {% endif %}
+      {% if flash_success %}
+        <div class="alert alert-success">{{ flash_success }}</div>
+      {% endif %}
+
+      {% block content %}{% endblock %}
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  </body>
+</html>

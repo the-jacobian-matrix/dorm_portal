@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex flex-column flex-md-row align-items-start justify-content-between gap-2 mb-3">
+  <div>
+    <div class="muted small"><a href="/students/{{ student.id }}">← Back</a></div>
+    <h1 class="h4 mb-1">New report</h1>
+    <div class="muted">For {{ student.name }}</div>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    <form method="post" action="/students/{{ student.id }}/reports" enctype="multipart/form-data" class="vstack gap-3">
+      <div class="row g-2">
+        <div class="col-12 col-md-6">
+          <label class="form-label">Date</label>
+          <input class="form-control" type="date" name="report_date" value="{{ today }}" required>
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label">Rating (1-5, optional)</label>
+          <input class="form-control" type="number" min="1" max="5" name="rating" placeholder="e.g. 4">
+        </div>
+      </div>
+
+      <div>
+        <label class="form-label">Notes</label>
+        <textarea class="form-control" name="notes" rows="6" placeholder="Daily dorm performance notes..." required></textarea>
+      </div>
+
+      <div class="row g-2">
+        <div class="col-12 col-md-6">
+          <label class="form-label">Image link (optional)</label>
+          <input class="form-control" name="image_url" placeholder="https://...">
+          <div class="form-text">Paste a link (Google Drive direct link, Imgur, etc.).</div>
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label">Upload image (optional)</label>
+          <input class="form-control" type="file" name="image_file" accept="image/*">
+          <div class="form-text">Stored on this server and linked in the report.</div>
+        </div>
+      </div>
+
+      <div class="d-flex gap-2">
+        <button class="btn btn-primary">Save report</button>
+        <a class="btn btn-outline-secondary" href="/students/{{ student.id }}">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

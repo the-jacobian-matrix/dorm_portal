@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-2 mb-3">
+  <div>
+    <h1 class="h4 mb-1">Students</h1>
+    <div class="muted">Add students and write daily dorm reports.</div>
+  </div>
+
+  <form class="d-flex gap-2 w-100 w-md-auto" method="get" action="/students">
+    <input class="form-control" name="q" value="{{ q or '' }}" placeholder="Search name or email">
+    <button class="btn btn-outline-secondary">Search</button>
+  </form>
+</div>
+
+<div class="row g-3">
+  <div class="col-12 col-lg-5">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="fw-semibold">Add student</div>
+        </div>
+        <form method="post" action="/students" class="vstack gap-2">
+          <div>
+            <label class="form-label">Name</label>
+            <input class="form-control" name="name" placeholder="Student name" required>
+          </div>
+          <div>
+            <label class="form-label">Email</label>
+            <input class="form-control" type="email" name="email" placeholder="student@example.com" required>
+          </div>
+          <button class="btn btn-primary">Add</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-7">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="fw-semibold mb-2">All students</div>
+        {% if students|length == 0 %}
+          <div class="muted">No students yet.</div>
+        {% else %}
+          <div class="list-group list-group-flush">
+            {% for s in students %}
+              <div class="list-group-item d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2">
+                <div>
+                  <div class="fw-semibold">{{ s.name }}</div>
+                  <div class="muted small">{{ s.email }}</div>
+                </div>
+                <div class="d-flex gap-2">
+                  <a class="btn btn-sm btn-outline-primary" href="/students/{{ s.id }}">View</a>
+                  <a class="btn btn-sm btn-outline-secondary" href="/students/{{ s.id }}/edit">Edit</a>
+                  <form method="post" action="/students/{{ s.id }}/delete" onsubmit="return confirm('Delete this student and all their reports?');">
+                    <button class="btn btn-sm btn-outline-danger">Delete</button>
+                  </form>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

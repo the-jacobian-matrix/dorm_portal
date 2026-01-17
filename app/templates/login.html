@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-md-8 col-lg-6">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h1 class="h4 mb-2">Sign in</h1>
+        <div class="muted mb-3">Use Google to access the dorm parent portal (no Firebase).</div>
+
+        {% if not google_configured %}
+          <div class="alert alert-warning">
+            Google OAuth isn’t configured yet. Add <b>GOOGLE_CLIENT_ID</b>, <b>GOOGLE_CLIENT_SECRET</b>, and <b>GOOGLE_REDIRECT_URI</b> in <code>.env</code>.
+          </div>
+        {% endif %}
+
+        <a class="btn btn-primary w-100" href="/auth/google" {% if not google_configured %}aria-disabled="true" onclick="return false;"{% endif %}>
+          Continue with Google
+        </a>
+
+        {% if dev_mode %}
+          <div class="text-center muted small my-3">or</div>
+          <form method="post" action="/login/dev">
+            <button class="btn btn-outline-secondary w-100" type="submit">
+              Dev login (no Google keys)
+            </button>
+          </form>
+          <div class="form-text">Dev mode should never be enabled in production.</div>
+        {% endif %}
+
+        <hr>
+        <div class="muted small">
+          Admin note: you can restrict access later (e.g., to a specific email domain).
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

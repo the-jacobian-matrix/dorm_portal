@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex flex-column flex-md-row align-items-start justify-content-between gap-2 mb-3">
+  <div>
+    <div class="muted small"><a href="/students">← Back</a></div>
+    <h1 class="h4 mb-1">{{ student.name }}</h1>
+    <div class="muted">{{ student.email }}</div>
+  </div>
+
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary" href="/students/{{ student.id }}/edit">Edit student</a>
+    <a class="btn btn-outline-primary" href="/students/{{ student.id }}/reports/new">New report</a>
+    <form method="post" action="/students/{{ student.id }}/delete" onsubmit="return confirm('Delete this student and all their reports?');">
+      <button class="btn btn-outline-danger">Delete</button>
+    </form>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-12 col-lg-7">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <div class="fw-semibold">Recent reports</div>
+          <a class="small" href="/students/{{ student.id }}/reports">View all</a>
+        </div>
+        {% if reports|length == 0 %}
+          <div class="muted">No reports yet.</div>
+        {% else %}
+          <div class="vstack gap-2">
+            {% for r in reports %}
+              <div class="border rounded-3 p-3 bg-white">
+                <div class="d-flex justify-content-between">
+                  <div class="fw-semibold">{{ r.report_date }}</div>
+                  {% if r.rating %}
+                    <span class="badge text-bg-primary">Rating: {{ r.rating }}/5</span>
+                  {% endif %}
+                </div>
+                <div class="d-flex flex-wrap gap-2 mt-2">
+                  <a class="btn btn-sm btn-outline-secondary" href="/students/{{ student.id }}/reports/{{ r.id }}/edit">Edit</a>
+                  <form method="post" action="/students/{{ student.id }}/reports/{{ r.id }}/delete" onsubmit="return confirm('Delete this report?');">
+                    <button class="btn btn-sm btn-outline-danger">Delete</button>
+                  </form>
+                </div>
+                <div class="mt-2" style="white-space: pre-wrap;">{{ r.notes }}</div>
+
+                {% if r.image_url %}
+                  <div class="mt-2"><a href="{{ r.image_url }}" target="_blank">Image link</a></div>
+                {% endif %}
+                {% if r.image_path %}
+                  <div class="mt-2"><a href="{{ r.image_path }}" target="_blank">Uploaded image</a></div>
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-5">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="fw-semibold mb-2">Send a report (command)</div>
+        <div class="muted small mb-2">Generates an email for a specific date and sends it to the student's email.</div>
+
+        <form method="post" action="/students/{{ student.id }}/send" class="vstack gap-2">
+          <div>
+            <label class="form-label">Report date</label>
+            <input class="form-control" type="date" name="report_date" value="{{ today }}" required>
+          </div>
+          <button class="btn btn-success">Generate & Send</button>
+        </form>
+
+        <hr>
+        <div class="muted small">
+          SMTP must be configured in <code>.env</code> for sending to work.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
