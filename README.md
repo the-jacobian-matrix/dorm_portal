@@ -71,3 +71,31 @@ Open: http://127.0.0.1:8000 (or http://127.0.0.1:8001 if you run with `--port 80
 ## Notes
 - Database: SQLite file `dorm.db` in the project root.
 - Uploads: stored in `static/uploads/` and served at `/uploads/...`.
+
+## Vercel environment setup
+
+For Vercel deployments, use `/setup` to generate secure values, then add them in **Vercel → Project Settings → Environment Variables**.
+
+- Enter an admin token on `/setup`.
+- If you enter `whoisthere`, the generated `ADMIN_TOKEN_HASH` matches that token.
+- Copy generated values for:
+  - `ADMIN_TOKEN_HASH`
+  - `SESSION_SECRET`
+  - `DEV_MODE=false`
+
+Then also configure your existing required values (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, SMTP vars as needed), and redeploy.
+
+
+## Google OAuth on Vercel (fix for Error 400 invalid_request)
+
+Set `GOOGLE_REDIRECT_URI` to your exact deployed callback URL, for example:
+
+```env
+GOOGLE_REDIRECT_URI=https://dorm-portal-eight.vercel.app/auth/google/callback
+```
+
+Important:
+- Do **not** use a double protocol like `http://https://...`.
+- Add the exact same URL in Google Cloud Console under **Authorized redirect URIs**.
+- The URL must match character-for-character (scheme, domain, path, no trailing slash changes).
+- After updating Vercel environment variables, redeploy.

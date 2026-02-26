@@ -27,9 +27,14 @@
           <div class="form-text">Dev mode should never be enabled in production.</div>
         {% endif %}
 
+        <div class="d-grid mt-3">
+          <a class="btn btn-sm btn-outline-primary" href="/setup">Open setup</a>
+        </div>
+
         <hr>
         <div class="muted small">
           Admin note: you can restrict access later (e.g., to a specific email domain).
+          {% if setup_complete %} Environment setup detected.{% endif %}
         </div>
       </div>
     </div>

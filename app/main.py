@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from datetime import date
+import hashlib
+import secrets
 from pathlib import Path
 from typing import Optional
+from urllib.parse import quote_plus
 from uuid import uuid4
 
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
@@ -27,13 +30,16 @@ UPLOADS_DIR = STATIC_DIR / "uploads"
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title="Dorm Management Portal")
+ALLOWED_UPLOAD_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+
+app = FastAPI(title=settings.app_name)
 
 app.add_middleware(
     SessionMiddleware,
     secret_key=settings.session_secret,
     same_site="lax",
-    https_only=False,
+    https_only=not settings.dev_mode,
 )
 
 templates = Jinja2Templates(directory=str((Path(__file__).parent / "templates").resolve()))
@@ -53,6 +59,16 @@ def _startup() -> None:
 @app.get("/", response_class=HTMLResponse)
 def home() -> RedirectResponse:
     return RedirectResponse(url="/students", status_code=303)
+
+
+def _redirect_with_message(url: str, *, success: str | None = None, error: str | None = None) -> RedirectResponse:
+    params: list[str] = []
+    if success:
+        params.append(f"success={quote_plus(success)}")
+    if error:
+        params.append(f"error={quote_plus(error)}")
+    qs = f"?{'&'.join(params)}" if params else ""
+    return RedirectResponse(url=f"{url}{qs}", status_code=303)
 
 
 def _flash_from_query(request: Request) -> dict:
@@ -84,18 +100,100 @@ def _require_login(request: Request) -> RedirectResponse | None:
     return None
 
 
+def _normalize_name(name: str) -> str:
+    return " ".join(name.strip().split())
+
+
+def _normalize_email(email: str) -> str:
+    return email.strip().lower()
+
+
+def _parse_iso_date(value: str) -> date:
+    try:
+        return date.fromisoformat(value)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="Invalid report date") from exc
+
+
+def _safe_rating(rating: Optional[int]) -> Optional[int]:
+    if rating is None:
+        return None
+    if rating < 1 or rating > 5:
+        raise HTTPException(status_code=422, detail="Rating must be between 1 and 5")
+    return rating
+
+
+def _hash_token(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _is_setup_complete() -> bool:
+    return bool(settings.admin_token_hash and settings.session_secret != "dev-change-me")
+
+
+@app.get("/setup", response_class=HTMLResponse)
+def setup_page(request: Request):
+    return templates.TemplateResponse(
+        "setup.html",
+        {
+            "request": request,
+            "setup_complete": _is_setup_complete(),
+            "generated_env": None,
+            **_base_template_context(request),
+        },
+    )
+
+
+@app.post("/setup", response_class=HTMLResponse)
+def setup_submit(request: Request, admin_token: str = Form(...)):
+    token = admin_token.strip()
+    if not token:
+        return templates.TemplateResponse(
+            "setup.html",
+            {
+                "request": request,
+                "setup_complete": _is_setup_complete(),
+                "generated_env": None,
+                "flash_error": "Admin token is required",
+                **_base_template_context(request),
+            },
+            status_code=422,
+        )
+
+    baseline_hash = _hash_token("whoisthere")
+    token_hash = _hash_token(token)
+    session_secret = secrets.token_urlsafe(48)
+
+    generated_env = {
+        "ADMIN_TOKEN_HASH": baseline_hash if token == "whoisthere" else token_hash,
+        "SESSION_SECRET": session_secret,
+        "DEV_MODE": "false",
+    }
+
+    return templates.TemplateResponse(
+        "setup.html",
+        {
+            "request": request,
+            "setup_complete": _is_setup_complete(),
+            "generated_env": generated_env,
+            "flash_success": "Environment values generated. Copy them into Vercel project settings.",
+            **_base_template_context(request),
+        },
+    )
+
+
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
     return templates.TemplateResponse(
         "login.html",
-        {"request": request, **_base_template_context(request)},
+        {"request": request, "setup_complete": _is_setup_complete(), **_base_template_context(request)},
     )
 
 
 @app.post("/login/dev")
 def login_dev(request: Request) -> RedirectResponse:
     if not settings.dev_mode:
-        return RedirectResponse(url="/login?error=Dev%20mode%20is%20disabled", status_code=303)
+        return _redirect_with_message("/login", error="Dev mode is disabled")
 
     request.session["user"] = {
         "id": None,
@@ -104,13 +202,13 @@ def login_dev(request: Request) -> RedirectResponse:
         "picture_url": None,
         "dev": True,
     }
-    return RedirectResponse(url="/students?success=Dev%20login%20enabled", status_code=303)
+    return _redirect_with_message("/students", success="Dev login enabled")
 
 
 @app.get("/logout")
 def logout(request: Request) -> RedirectResponse:
     request.session.clear()
-    return RedirectResponse(url="/login?success=Signed%20out", status_code=303)
+    return _redirect_with_message("/login", success="Signed out")
 
 
 @app.get("/auth/google")
@@ -136,7 +234,13 @@ def students_page(request: Request, session: Session = Depends(get_session)):
     students = session.exec(stmt.order_by(Student.created_at.desc())).all()
     return templates.TemplateResponse(
         "students.html",
-        {"request": request, "students": students, "q": q, **_base_template_context(request)},
+        {
+            "request": request,
+            "students": students,
+            "q": q,
+            "student_count": len(students),
+            **_base_template_context(request),
+        },
     )
 
 
@@ -150,11 +254,24 @@ def create_student(
     redirect = _require_login(request)
     if redirect:
         return redirect
-    student = Student(name=name.strip(), email=email.strip())
+
+    normalized_name = _normalize_name(name)
+    normalized_email = _normalize_email(email)
+
+    if not normalized_name:
+        return _redirect_with_message("/students", error="Student name is required")
+    if "@" not in normalized_email:
+        return _redirect_with_message("/students", error="A valid email is required")
+
+    existing = session.exec(select(Student).where(Student.email == normalized_email)).first()
+    if existing:
+        return _redirect_with_message(f"/students/{existing.id}", error="A student with this email already exists")
+
+    student = Student(name=normalized_name, email=normalized_email)
     session.add(student)
     session.commit()
     session.refresh(student)
-    return RedirectResponse(url=f"/students/{student.id}", status_code=303)
+    return _redirect_with_message(f"/students/{student.id}", success="Student created")
 
 
 @app.get("/students/{student_id}/edit", response_class=HTMLResponse)
@@ -168,7 +285,7 @@ def student_edit_page(
         return redirect
     student = session.get(Student, student_id)
     if not student:
-        return RedirectResponse(url="/students?error=Student%20not%20found", status_code=303)
+        return _redirect_with_message("/students", error="Student not found")
     return templates.TemplateResponse(
         "student_edit.html",
         {"request": request, "student": student, **_base_template_context(request)},
@@ -188,12 +305,25 @@ def student_edit_submit(
         return redirect
     student = session.get(Student, student_id)
     if not student:
-        return RedirectResponse(url="/students?error=Student%20not%20found", status_code=303)
-    student.name = name.strip()
-    student.email = email.strip()
+        return _redirect_with_message("/students", error="Student not found")
+
+    normalized_name = _normalize_name(name)
+    normalized_email = _normalize_email(email)
+
+    if not normalized_name:
+        return _redirect_with_message(f"/students/{student_id}/edit", error="Student name is required")
+    if "@" not in normalized_email:
+        return _redirect_with_message(f"/students/{student_id}/edit", error="A valid email is required")
+
+    duplicate = session.exec(select(Student).where(Student.email == normalized_email)).first()
+    if duplicate and duplicate.id != student_id:
+        return _redirect_with_message(f"/students/{student_id}/edit", error="Another student already uses this email")
+
+    student.name = normalized_name
+    student.email = normalized_email
     session.add(student)
     session.commit()
-    return RedirectResponse(url=f"/students/{student_id}?success=Student%20updated", status_code=303)
+    return _redirect_with_message(f"/students/{student_id}", success="Student updated")
 
 
 def _try_delete_uploaded_file(image_path: str | None) -> None:
@@ -207,7 +337,6 @@ def _try_delete_uploaded_file(image_path: str | None) -> None:
         if disk_path.exists() and disk_path.is_file():
             disk_path.unlink()
     except OSError:
-        # Best-effort cleanup only
         pass
 
 
@@ -222,19 +351,17 @@ def student_delete(
         return redirect
     student = session.get(Student, student_id)
     if not student:
-        return RedirectResponse(url="/students?error=Student%20not%20found", status_code=303)
+        return _redirect_with_message("/students", error="Student not found")
 
-    # Cleanup uploaded images for this student's reports
     reports = session.exec(select(DailyReport).where(DailyReport.student_id == student_id)).all()
     for r in reports:
         _try_delete_uploaded_file(r.image_path)
 
-    # Delete reports then student
     session.exec(delete(DailyReport).where(DailyReport.student_id == student_id))
     session.delete(student)
     session.commit()
 
-    return RedirectResponse(url="/students?success=Student%20deleted", status_code=303)
+    return _redirect_with_message("/students", success="Student deleted")
 
 
 @app.get("/students/{student_id}", response_class=HTMLResponse)
@@ -315,11 +442,18 @@ def report_new(
 
 def _save_upload(image_file: UploadFile) -> str:
     original_name = (image_file.filename or "upload").replace("/", "_").replace("\\", "_")
+    extension = Path(original_name).suffix.lower()
+    if extension not in ALLOWED_UPLOAD_EXTENSIONS:
+        raise HTTPException(status_code=422, detail="Unsupported image type")
+
+    payload = image_file.file.read(MAX_UPLOAD_BYTES + 1)
+    if len(payload) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Image is too large (max 5MB)")
+
     out_name = f"{uuid4().hex}_{original_name}"
     out_path = UPLOADS_DIR / out_name
-
     with out_path.open("wb") as f:
-        f.write(image_file.file.read())
+        f.write(payload)
 
     return f"/uploads/{out_name}"
 
@@ -342,7 +476,10 @@ def create_report(
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
 
-    parsed_date = date.fromisoformat(report_date)
+    parsed_date = _parse_iso_date(report_date)
+    clean_notes = notes.strip()
+    if not clean_notes:
+        return _redirect_with_message(f"/students/{student_id}/reports/new", error="Notes are required")
 
     image_path: str | None = None
     if image_file and image_file.filename:
@@ -351,15 +488,15 @@ def create_report(
     report = DailyReport(
         student_id=student_id,
         report_date=parsed_date,
-        notes=notes.strip(),
-        rating=rating,
-        image_url=(image_url.strip() if image_url else None),
+        notes=clean_notes,
+        rating=_safe_rating(rating),
+        image_url=(image_url.strip() if image_url and image_url.strip() else None),
         image_path=image_path,
     )
     session.add(report)
     session.commit()
 
-    return RedirectResponse(url=f"/students/{student_id}?success=Report%20saved", status_code=303)
+    return _redirect_with_message(f"/students/{student_id}", success="Report saved")
 
 
 @app.get("/students/{student_id}/reports/{report_id}/edit", response_class=HTMLResponse)
@@ -374,11 +511,11 @@ def report_edit_page(
         return redirect
     student = session.get(Student, student_id)
     if not student:
-        return RedirectResponse(url="/students?error=Student%20not%20found", status_code=303)
+        return _redirect_with_message("/students", error="Student not found")
 
     report = session.get(DailyReport, report_id)
     if not report or report.student_id != student_id:
-        return RedirectResponse(url=f"/students/{student_id}/reports?error=Report%20not%20found", status_code=303)
+        return _redirect_with_message(f"/students/{student_id}/reports", error="Report not found")
 
     return templates.TemplateResponse(
         "report_edit.html",
@@ -405,35 +542,36 @@ def report_edit_submit(
         return redirect
     student = session.get(Student, student_id)
     if not student:
-        return RedirectResponse(url="/students?error=Student%20not%20found", status_code=303)
+        return _redirect_with_message("/students", error="Student not found")
 
     report = session.get(DailyReport, report_id)
     if not report or report.student_id != student_id:
-        return RedirectResponse(url=f"/students/{student_id}/reports?error=Report%20not%20found", status_code=303)
+        return _redirect_with_message(f"/students/{student_id}/reports", error="Report not found")
 
-    report.report_date = date.fromisoformat(report_date)
-    report.notes = notes.strip()
-    report.rating = rating
+    clean_notes = notes.strip()
+    if not clean_notes:
+        return _redirect_with_message(f"/students/{student_id}/reports/{report_id}/edit", error="Notes are required")
+
+    report.report_date = _parse_iso_date(report_date)
+    report.notes = clean_notes
+    report.rating = _safe_rating(rating)
 
     if clear_image_url:
         report.image_url = None
-    else:
-        # If left blank, keep whatever is already there.
-        if image_url is not None and image_url.strip() != "":
-            report.image_url = image_url.strip()
+    elif image_url is not None and image_url.strip() != "":
+        report.image_url = image_url.strip()
 
     if clear_image_upload:
         _try_delete_uploaded_file(report.image_path)
         report.image_path = None
 
     if image_file and image_file.filename:
-        # Replace previous upload
         _try_delete_uploaded_file(report.image_path)
         report.image_path = _save_upload(image_file)
 
     session.add(report)
     session.commit()
-    return RedirectResponse(url=f"/students/{student_id}/reports?success=Report%20updated", status_code=303)
+    return _redirect_with_message(f"/students/{student_id}/reports", success="Report updated")
 
 
 @app.post("/students/{student_id}/reports/{report_id}/delete")
@@ -448,12 +586,12 @@ def report_delete(
         return redirect
     report = session.get(DailyReport, report_id)
     if not report or report.student_id != student_id:
-        return RedirectResponse(url=f"/students/{student_id}/reports?error=Report%20not%20found", status_code=303)
+        return _redirect_with_message(f"/students/{student_id}/reports", error="Report not found")
 
     _try_delete_uploaded_file(report.image_path)
     session.delete(report)
     session.commit()
-    return RedirectResponse(url=f"/students/{student_id}/reports?success=Report%20deleted", status_code=303)
+    return _redirect_with_message(f"/students/{student_id}/reports", success="Report deleted")
 
 
 @app.post("/students/{student_id}/send", response_class=HTMLResponse)
@@ -471,7 +609,7 @@ def send_report_command(
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
 
-    parsed_date = date.fromisoformat(report_date)
+    parsed_date = _parse_iso_date(report_date)
 
     report = session.exec(
         select(DailyReport)
@@ -500,8 +638,6 @@ def send_report_command(
         )
 
     subject = f"Dorm Report - {student.name} - {report.report_date}"
-
-    # Best-effort: build a base URL for clickable uploaded-image links.
     public_base_url = str(request.base_url).rstrip("/")
 
     html_body = templates.get_template("email_report.html").render(
@@ -514,11 +650,7 @@ def send_report_command(
         + (f"Rating: {report.rating}/5\n" if report.rating else "")
         + f"\nNotes:\n{report.notes}\n"
         + (f"\nImage link: {report.image_url}\n" if report.image_url else "")
-        + (
-            f"\nUploaded image: {public_base_url}{report.image_path}\n"
-            if report.image_path
-            else ""
-        )
+        + (f"\nUploaded image: {public_base_url}{report.image_path}\n" if report.image_path else "")
     )
 
     try:
@@ -552,7 +684,6 @@ def send_report_command(
             "today": date.today().isoformat(),
             "flash_success": flash_success,
             "flash_error": flash_error,
-            "current_user": request.session.get("user"),
-            "google_configured": is_auth_configured(),
+            **_base_template_context(request),
         },
     )

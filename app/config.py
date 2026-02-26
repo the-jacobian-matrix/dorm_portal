@@ -10,6 +10,7 @@ class Settings(BaseSettings):
 
     # Session / Auth
     session_secret: str = "dev-change-me"
+    admin_token_hash: str | None = None
 
     # Development mode (allows local login without Google OAuth configured)
     dev_mode: bool = False
