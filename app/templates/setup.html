@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-md-10 col-lg-8">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h1 class="h4 mb-2">Environment setup (Vercel)</h1>
+        <div class="muted mb-3">Generate secure values here, then paste them into your Vercel project environment variables.</div>
+
+        {% if setup_complete %}
+          <div class="alert alert-success">Server already has environment values loaded.</div>
+        {% else %}
+          <div class="alert alert-warning">Setup values are not loaded yet on this deployment.</div>
+        {% endif %}
+
+        <form method="post" action="/setup" class="vstack gap-2">
+          <div>
+            <label class="form-label">Admin token</label>
+            <input class="form-control" name="admin_token" type="password" placeholder="Enter admin token" required>
+            <div class="form-text">If you enter <code>whoisthere</code>, the generated hash matches that exact token.</div>
+          </div>
+          <button class="btn btn-primary" type="submit">Generate environment values</button>
+        </form>
+
+        {% if generated_env %}
+          <hr>
+          <h2 class="h6">Copy these into Vercel → Project Settings → Environment Variables</h2>
+          <div class="bg-light border rounded p-3 small" style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap;">{% for key, value in generated_env.items() %}{{ key }}={{ value }}
+{% endfor %}</div>
+        {% endif %}
+
+        <hr>
+        <div class="muted small">
+          This page does <b>not</b> write local <code>.env</code> files (serverless file systems are ephemeral on Vercel).
+          After saving environment variables in Vercel, redeploy your project.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import quote_plus, urlparse
 
 from authlib.integrations.starlette_client import OAuth, OAuthError
 from fastapi import Depends, HTTPException, Request
@@ -13,6 +14,22 @@ from app.models import DormUser
 
 
 oauth = OAuth()
+
+def _validated_redirect_uri(raw_uri: str | None) -> tuple[str | None, str | None]:
+    if not raw_uri:
+        return None, "GOOGLE_REDIRECT_URI is missing"
+
+    uri = raw_uri.strip()
+    if uri.startswith("http://https://"):
+        uri = uri.replace("http://https://", "https://", 1)
+    elif uri.startswith("https://http://"):
+        uri = uri.replace("https://http://", "http://", 1)
+
+    parsed = urlparse(uri)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return None, "GOOGLE_REDIRECT_URI must be a full URL like https://your-domain/auth/google/callback"
+
+    return uri, None
 
 
 def configure_oauth() -> None:
@@ -27,7 +44,8 @@ def configure_oauth() -> None:
 
 
 def is_auth_configured() -> bool:
-    return bool(settings.google_client_id and settings.google_client_secret and settings.google_redirect_uri)
+    redirect_uri, error = _validated_redirect_uri(settings.google_redirect_uri)
+    return bool(settings.google_client_id and settings.google_client_secret and redirect_uri and not error)
 
 
 def get_current_user(request: Request) -> DormUser | None:
@@ -85,8 +103,10 @@ async def google_login(request: Request) -> RedirectResponse:
     if not is_auth_configured():
         return RedirectResponse(url="/login?error=Google%20OAuth%20not%20configured", status_code=303)
 
-    redirect_uri = settings.google_redirect_uri
-    assert redirect_uri
+    redirect_uri, redirect_error = _validated_redirect_uri(settings.google_redirect_uri)
+    if redirect_error or not redirect_uri:
+        message = quote_plus(redirect_error or "Invalid Google redirect URI")
+        return RedirectResponse(url=f"/login?error={message}", status_code=303)
 
     return await oauth.google.authorize_redirect(request, redirect_uri)
 
