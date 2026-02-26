@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 from datetime import date
-import hashlib
-import secrets
 from pathlib import Path
 from typing import Optional
 from urllib.parse import quote_plus
@@ -123,70 +121,11 @@ def _safe_rating(rating: Optional[int]) -> Optional[int]:
     return rating
 
 
-def _hash_token(value: str) -> str:
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()
-
-
-def _is_setup_complete() -> bool:
-    return bool(settings.admin_token_hash and settings.session_secret != "dev-change-me")
-
-
-@app.get("/setup", response_class=HTMLResponse)
-def setup_page(request: Request):
-    return templates.TemplateResponse(
-        "setup.html",
-        {
-            "request": request,
-            "setup_complete": _is_setup_complete(),
-            "generated_env": None,
-            **_base_template_context(request),
-        },
-    )
-
-
-@app.post("/setup", response_class=HTMLResponse)
-def setup_submit(request: Request, admin_token: str = Form(...)):
-    token = admin_token.strip()
-    if not token:
-        return templates.TemplateResponse(
-            "setup.html",
-            {
-                "request": request,
-                "setup_complete": _is_setup_complete(),
-                "generated_env": None,
-                "flash_error": "Admin token is required",
-                **_base_template_context(request),
-            },
-            status_code=422,
-        )
-
-    baseline_hash = _hash_token("whoisthere")
-    token_hash = _hash_token(token)
-    session_secret = secrets.token_urlsafe(48)
-
-    generated_env = {
-        "ADMIN_TOKEN_HASH": baseline_hash if token == "whoisthere" else token_hash,
-        "SESSION_SECRET": session_secret,
-        "DEV_MODE": "false",
-    }
-
-    return templates.TemplateResponse(
-        "setup.html",
-        {
-            "request": request,
-            "setup_complete": _is_setup_complete(),
-            "generated_env": generated_env,
-            "flash_success": "Environment values generated. Copy them into Vercel project settings.",
-            **_base_template_context(request),
-        },
-    )
-
-
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
     return templates.TemplateResponse(
         "login.html",
-        {"request": request, "setup_complete": _is_setup_complete(), **_base_template_context(request)},
+        {"request": request, **_base_template_context(request)},
     )
 
 
